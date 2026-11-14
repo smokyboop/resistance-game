@@ -212,6 +212,8 @@ button{font:inherit;color:inherit}
 .rank-row{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:10px;border-radius:12px;background:#1b294e;padding:14px 16px;font-variant-numeric:tabular-nums}
 .rank-number{color:#94b0ed;font-weight:700}.rank-top .rank-number{color:#ffd34d}.rank-time{font-family:var(--f-mono);font-weight:700;font-size:19px;color:#e7f0ff}
 @media(max-width:600px){#rank-dialog{padding:18px}.rank-row{padding:12px;grid-template-columns:28px 1fr auto}.rank-head h2{font-size:23px}.title-wrap .form{gap:10px}}
+
+.student-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:0}.student-fields .field{min-width:0}
 </style>
 
 <div class="stage m1" id="stage"></div>
@@ -230,10 +232,10 @@ button{font:inherit;color:inherit}
         <h1 class="big">시한폭탄<br><em>해제 작전</em></h1>
         <p class="lede">스위치는 단 하나만 끌 수 있습니다. 전류가 어떤 길로 흐르는지 읽어 내고, 폭탄으로 가는 전류만 끊어 내세요.</p>
         <form class="form" id="start-form">
-          <div class="field">
+          <div class="student-fields"><div class="field">
             <label for="codename">요원 학번</label>
             <input id="codename" maxlength="10" inputmode="numeric" pattern="[0-9]{4,10}" required autocomplete="off" placeholder="학번 입력 (예: 20315)" title="학번을 숫자 4~10자리로 입력하세요" value="">
-          </div>
+          </div><div class="field"><label for="student-name">이름</label><input id="student-name" required maxlength="20" autocomplete="off" placeholder="이름 입력 (예: 홍길동)" pattern=".*\S.*" title="이름을 입력하세요"></div></div>
           <div class="field">
             <label id="timer-lbl">폭탄 타이머</label>
             <div class="seg" role="group" aria-labelledby="timer-lbl" id="timer-seg">
@@ -326,7 +328,7 @@ button{font:inherit;color:inherit}
         <div><dt>폭발 횟수</dt><dd id="end-deaths">0</dd></div>
         <div><dt>작전 시간</dt><dd id="end-time">0:00</dd></div>
       </dl>
-      <p id="rank-save-status" class="rank-note" role="status"></p>
+      <p id="rank-save-status" class="rank-note" role="status"></p><button class="go" id="rank-retry" type="button" hidden>기록 저장 다시 시도</button>
       <button class="go rank-open" type="button" id="btn-end-rank">🏆 랭킹보기(명예의 전당)</button>
       <button class="go" type="button" id="btn-restart"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>처음부터 다시</button>
     </div>
@@ -337,11 +339,11 @@ button{font:inherit;color:inherit}
 <dialog id="rank-dialog" aria-labelledby="rank-heading">
  <div class="rank-head"><h2 id="rank-heading">🏆 명예의 전당</h2><button type="button" id="rank-close" aria-label="랭킹 닫기">✕</button></div>
  <p class="rank-desc">가장 빠르게 작전을 완수한 요원 TOP 40<br>같은 학번은 가장 빠른 기록만 표시합니다.</p>
- <p class="rank-local">미리보기 · 현재 브라우저의 기록만 표시됩니다.<br>학생 전체 랭킹은 Firebase 연결 후 사용할 수 있습니다.</p>
+ <p class="rank-local">모든 학생이 함께 보는 랭킹입니다. 학번, 이름 일부(예: 홍*동), 최고 기록이 표시됩니다.</p>
  <label for="rank-mode">폭탄 타이머</label>
  <select id="rank-mode"><option value="60">60초</option><option value="30">30초</option><option value="0">시간 제한 없음</option></select>
- <p class="rank-note">작전 개시부터 마지막 정답 선택까지 측정합니다.<br>동일 시간은 먼저 완료한 기록이 앞섭니다.</p>
- <p id="rank-status" role="status"></p>
+ <p class="rank-note">작전 개시부터 마지막 정답 선택까지 측정합니다.<br>동일 시간은 학번 순서로 표시합니다.</p>
+ <button class="go" id="rank-refresh" type="button">랭킹 새로고침</button><p id="rank-status" role="status"></p>
  <ol id="rank-list" aria-label="완료 시간 순위"></ol>
 </dialog>
 
@@ -502,7 +504,7 @@ document.querySelectorAll('.snd').forEach(b=>b.addEventListener('click',()=>{mut
 paintSnd();
 
 /* ---------- state ---------- */
-const S={finishMs:null,recorded:false,codename:'',limit:60,qi:0,deaths:0,t0:0,timer:null,left:0,locked:false};
+const S={finishMs:null,recorded:false,studentName:'',codename:'',limit:60,qi:0,deaths:0,t0:0,timer:null,left:0,locked:false};
 const $=id=>document.getElementById(id);
 const stage=$('stage');
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.hidden=s.id!==id);}
@@ -510,7 +512,7 @@ function fmt(s){s=Math.max(0,s);return String(Math.floor(s/60)).padStart(2,'0')+
 function stopTimer(){clearInterval(S.timer);S.timer=null;}
 
 $('timer-seg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.limit=+b.dataset.t;$('timer-seg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
-$('start-form').addEventListener('submit',e=>{e.preventDefault();ac();S.codename=$('codename').value.trim();if(!/^[0-9]{4,10}$/.test(S.codename))return;S.finishMs=null;S.recorded=false;S.qi=0;S.deaths=0;S.t0=Date.now();openBrief(0);});
+$('start-form').addEventListener('submit',e=>{e.preventDefault();ac();S.studentName=$('student-name').value.trim();if(!S.studentName){$('student-name').focus();return;}S.codename=$('codename').value.trim();if(!/^[0-9]{4,10}$/.test(S.codename))return;S.finishMs=null;S.recorded=false;S.saving=false;S.qi=0;S.deaths=0;S.t0=Date.now();openBrief(0);});
 
 /* briefing with typewriter */
 let typeT=null;
@@ -643,7 +645,7 @@ function stars(cv){
 
 function ending(){
   stopTimer();stage.className='stage end';
-  $('end-agent').textContent='AGENT '+S.codename.toUpperCase();
+  $('end-agent').textContent='AGENT '+S.codename+' · '+S.studentName;
   $('end-deaths').textContent=S.deaths;
   const sec=Math.floor((S.finishMs??(Date.now()-S.t0))/1000);$('end-time').textContent=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
   saveRank();
@@ -652,43 +654,71 @@ function ending(){
 $('btn-restart').onclick=()=>{stopTimer();stage.className='stage m1';show('s-title');$('codename').focus();};
 
 
-/* Local preview storage. Shared classroom storage requires Firebase integration. */
-const RANK_KEY='resistance-mission-ranks-v1';
-function rankTime(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+'.'+String(Math.floor(ms%1000/10)).padStart(2,'0');}
-function rankRead(){const raw=JSON.parse(localStorage.getItem(RANK_KEY)||'[]');if(!Array.isArray(raw))throw Error('invalid records');return raw.filter(r=>r&&/^[0-9]{4,10}$/.test(r.studentId)&&Number.isFinite(r.elapsedMs)&&r.elapsedMs>0&&[0,30,60].includes(r.limit)&&Number.isFinite(r.completedAt));}
-function rankCompare(a,b){return a.elapsedMs-b.elapsedMs||a.completedAt-b.completedAt||a.studentId.localeCompare(b.studentId);}
-function saveRank(){
- if(S.recorded||S.finishMs===null)return;
- const msg=$('rank-save-status');
- try{
-  const rows=rankRead(),record={studentId:S.codename,elapsedMs:S.finishMs,completedAt:Date.now(),limit:S.limit};
-  const i=rows.findIndex(r=>r.studentId===record.studentId&&r.limit===record.limit);
-  if(i<0)rows.push(record);else if(record.elapsedMs<rows[i].elapsedMs)rows[i]=record;
-  localStorage.setItem(RANK_KEY,JSON.stringify(rows));S.recorded=true;
-  msg.textContent='이 브라우저에 기록 저장 완료 · '+rankTime(record.elapsedMs)+' (학번별 최고 기록 유지)';
- }catch(e){msg.textContent='이 브라우저에 기록을 저장하지 못했습니다. 저장 공간 설정을 확인해 주세요.';}
+
+/* Firebase classroom leaderboard */
+const FIREBASE_CONFIG={apiKey:'AIzaSyDPl0-Nyi20KWsYMv1rdiyEyGmtqhxz590',authDomain:'resistance-game-f810e.firebaseapp.com',projectId:'resistance-game-f810e',storageBucket:'resistance-game-f810e.firebasestorage.app',messagingSenderId:'223363789755',appId:'1:223363789755:web:af1a51b9a75b93765c0a9e'};
+let cloudPromise=null,rankRequest=0;
+async function cloud(){
+ if(!cloudPromise)cloudPromise=(async()=>{
+  const root='https://www.gstatic.com/firebasejs/13.3.0/';
+  const [appSDK,authSDK,dbSDK]=await Promise.all([import(root+'firebase-app.js'),import(root+'firebase-auth.js'),import(root+'firebase-firestore.js')]);
+  const app=appSDK.initializeApp(FIREBASE_CONFIG),auth=authSDK.getAuth(app);
+  await auth.authStateReady();
+  if(!auth.currentUser)await authSDK.signInAnonymously(auth);
+  return {db:dbSDK.getFirestore(app),sdk:dbSDK};
+ })().catch(e=>{cloudPromise=null;throw e});
+ return cloudPromise;
 }
-function renderRanks(){
- const list=$('rank-list');list.replaceChildren();
+function maskName(name){const chars=Array.from(name.trim());return chars.length<=1?'*':chars.length===2?chars[0]+'*':chars[0]+'*'.repeat(chars.length-2)+chars.at(-1);}
+function rankTime(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')+'.'+String(Math.floor(ms%1000/10)).padStart(2,'0');}
+function rankError(e){
+ if(location.protocol==='file:')return 'GitHub Pages에 올린 주소에서 실행해 주세요.';
+ if(e.code==='permission-denied')return '저장 권한이 없습니다. Firestore 규칙이 게시되었는지 확인해 주세요.';
+ if(e.code==='auth/operation-not-allowed')return 'Firebase의 익명 로그인 설정을 확인해 주세요.';
+ return '연결하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.';
+}
+async function saveRank(){
+ if(S.recorded||S.finishMs===null||S.saving)return;
+ const attempt={displayName:maskName(S.studentName),studentId:S.codename,elapsedMs:S.finishMs,limit:S.limit,run:S.t0};
+ S.saving=true;const msg=$('rank-save-status'),retry=$('rank-retry');retry.hidden=true;msg.textContent='명예의 전당에 기록을 저장하고 있습니다…';
  try{
-  const rows=rankRead().filter(r=>r.limit===+$('rank-mode').value).sort(rankCompare).slice(0,40);
-  $('rank-status').textContent=rows.length?rows.length+'명 등록 · 최대 40위까지 표시':'아직 완료 기록이 없습니다. 첫 번째 요원이 되어 보세요!';
+  const {db,sdk}=await cloud();
+  const ref=sdk.doc(db,'rankings',String(attempt.limit),'students',attempt.studentId);
+  const updated=await sdk.runTransaction(db,async tx=>{
+   const existing=await tx.get(ref);
+   if(existing.exists()&&existing.data().elapsedMs<=attempt.elapsedMs)return false;
+   tx.set(ref,{displayName:attempt.displayName,studentId:attempt.studentId,elapsedMs:attempt.elapsedMs,limit:attempt.limit,completedAt:sdk.serverTimestamp()});return true;
+  });
+  if(S.t0!==attempt.run)return;
+  S.recorded=true;msg.textContent=updated?'명예의 전당 저장 완료 · '+rankTime(attempt.elapsedMs):'기존 최고 기록을 유지했습니다. 이번 기록: '+rankTime(attempt.elapsedMs);
+ }catch(e){if(S.t0===attempt.run){msg.textContent='기록 저장 실패 · '+rankError(e);retry.hidden=false;}}
+ finally{if(S.t0===attempt.run)S.saving=false;}
+}
+async function renderRanks(){
+ const request=++rankRequest,mode=$('rank-mode').value,list=$('rank-list');list.replaceChildren();$('rank-status').textContent='랭킹을 불러오고 있습니다…';
+ try{
+  const {db,sdk}=await cloud();
+  const snap=await sdk.getDocsFromServer(sdk.query(sdk.collection(db,'rankings',mode,'students'),sdk.orderBy('elapsedMs','asc'),sdk.limit(40)));
+  if(request!==rankRequest)return;
+  const rows=snap.docs.map(d=>d.data());
+  $('rank-status').textContent=rows.length?rows.length+'명 표시 · 상위 40위':'아직 완료 기록이 없습니다. 첫 번째 요원이 되어 보세요!';
   rows.forEach((r,i)=>{const li=document.createElement('li');li.className='rank-row'+(i<3?' rank-top':'');
    const n=document.createElement('span');n.className='rank-number';n.textContent=i+1;
-   const id=document.createElement('strong');id.textContent=r.studentId;
+   const id=document.createElement('strong');id.textContent=r.studentId+(r.displayName?' · '+r.displayName:'');
    const time=document.createElement('span');time.className='rank-time';time.textContent=rankTime(r.elapsedMs);
    li.append(n,id,time);list.append(li);
   });
- }catch(e){$('rank-status').textContent='저장된 기록을 읽을 수 없습니다. 브라우저 저장 공간 설정을 확인해 주세요.';}
+ }catch(e){if(request===rankRequest)$('rank-status').textContent=rankError(e);}
 }
-function openRanks(){$('rank-mode').value=String(S.limit);renderRanks();$('rank-dialog').showModal();}
+function openRanks(){$('rank-mode').value=String(S.limit);$('rank-dialog').showModal();renderRanks();}
 $('btn-rank').onclick=openRanks;$('btn-end-rank').onclick=openRanks;
-$('rank-close').onclick=()=>$('rank-dialog').close();$('rank-mode').onchange=renderRanks;
+$('rank-close').onclick=()=>{++rankRequest;$('rank-dialog').close()};$('rank-mode').onchange=renderRanks;
+$('rank-refresh').onclick=renderRanks;$('rank-retry').onclick=saveRank;
 
 /* keep the codename and timer choice if the page is updated while open */
 const hot=window.claude&&window.claude.hot;
-if(hot&&hot.snapshot)hot.snapshot(()=>({codename:$('codename').value,limit:S.limit}));
-const start=data=>{if(data&&data.codename)$('codename').value=data.codename;if(data&&data.limit!=null){S.limit=data.limit;$('timer-seg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(+x.dataset.t===S.limit)));}};
+if(hot&&hot.snapshot)hot.snapshot(()=>({codename:$('codename').value,studentName:$('student-name').value,limit:S.limit}));
+const start=data=>{if(data&&data.studentName)$('student-name').value=data.studentName;if(data&&data.codename)$('codename').value=data.codename;if(data&&data.limit!=null){S.limit=data.limit;$('timer-seg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(+x.dataset.t===S.limit)));}};
 if(hot&&hot.ready)hot.ready(start);else start(hot&&hot.data||{});
 })();
 </script>
